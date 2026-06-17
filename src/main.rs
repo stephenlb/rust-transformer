@@ -1,6 +1,9 @@
 mod tokenizer;
 use tokenizer::Tokenizer;
 
+mod transformer;
+use transformer::Transformer;
+
 use std::fs;
 use anyhow::Result;
 
@@ -15,13 +18,14 @@ use tch::{
 /*
 TODO - ✅ Load Data
 TODO - ✅ Tokenizer Character level
-TODO - Upgraded Tokenizer ( Word-level tokens )
-TODO - Embedding
-TODO - Positional Encodings
+TODO - ✅ Upgraded Tokenizer ( Word-level tokens )
+TODO - ✅ Decide on Architecture Abstraction approach
+TODO - ✅ Embedding
 TODO - Transformer Head
 TODO - Transformer Block
-TODO - Model Network Projections
 TODO - Attention Alogo
+TODO - Positional Encodings
+TODO - Model Network Projections
 TODO - Multi-headed reshape 2x
 TODO - FForward ( MLP )
 TODO - 3x LayerNorms
@@ -31,8 +35,9 @@ TODO -
 */
 
 fn main() -> Result<()> {
-    let device = Device::Mps;
+    let device = Device::Cpu;
     let vs = VarStore::new(device);
+    // TODO use actual data
     let data: String = fs::read_to_string("data/training.txt")?;
     let test_string: &str ="Thank you Kyle ";
     let dictionary = Tokenizer::new(test_string);
@@ -41,11 +46,11 @@ fn main() -> Result<()> {
     tokens.print();
     println!("{}", data.len());
 
-    //let decoded = dictionary.decode(tokens);
-    //println!("{decoded}");
+    let decoded = dictionary.decode(tokens);
+    println!("'{decoded}'");
 
-    let test: Vec<String> = tokenizer::parser(test_string);
-    println!("{:?}", test);
+    //let test: Vec<String> = tokenizer::parser(test_string);
+    //println!("{:?}", test);
 
     //println!("{:?}", data);
     Ok(())
