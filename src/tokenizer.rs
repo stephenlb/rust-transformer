@@ -22,17 +22,15 @@ impl Tokenizer {
         words.sort_unstable();
         words.dedup();
 
-        //let mut chars: Vec<char> = text.chars().collect();
-        //chars.sort_unstable(); // <-- faster than quick sort
-        //chars.dedup();
-
         let mut encoder = HashMap::new(); // <- O(1) wow!
         let mut decoder = HashMap::new(); // <- O(1) wow!
 
+        // Token 0 is the Padding
+        encoder.insert("<padding>".to_string(), 0);
+        decoder.insert(0, "<padding>".to_string());
 
-        // index
         for (token, word) in words.iter().enumerate() {
-            let token = token as i64;
+            let token = (token + 1) as i64;
             encoder.insert(word.to_string(), token);
             decoder.insert(token, word.to_string());
         }
@@ -44,15 +42,13 @@ impl Tokenizer {
         }
     }
     
-    /*
     pub fn encode(&self, text: &str) -> Tensor {
-        let tokens: Vec<i64> = text
-            .chars()
-            .filter_map(|c| self.encoder.get(&c).copied())
+        let tokens: Vec<i64> = parser(text)
+            .iter()
+            .filter_map(|c| self.encoder.get(c).copied())
             .collect();
-        Tensor::from_slice(&tokens)
-    }//.as_str().to_string()
-    */
+        return Tensor::from_slice(&tokens);
+    }
 
     //                   batch seq probs <- TODO
     //

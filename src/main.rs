@@ -14,7 +14,7 @@ use tch::{
 
 /*
 TODO - ✅ Load Data
-TODO - ✅ Tokenizer
+TODO - ✅ Tokenizer Character level
 TODO - Upgraded Tokenizer ( Word-level tokens )
 TODO - Embedding
 TODO - Positional Encodings
@@ -34,19 +34,18 @@ fn main() -> Result<()> {
     let device = Device::Mps;
     let vs = VarStore::new(device);
     let data: String = fs::read_to_string("data/training.txt")?;
-    let dictionary = Tokenizer::new(&data);
     let test_string: &str ="Thank you Kyle ";
-    //let tokens: Tensor = dictionary.encode(test_string);
+    let dictionary = Tokenizer::new(test_string);
+    let tokens: Tensor = dictionary.encode(test_string);
     //let tokens = tokens.to_device(device);
-    //tokens.print();
+    tokens.print();
     println!("{}", data.len());
 
     //let decoded = dictionary.decode(tokens);
     //println!("{decoded}");
 
-    //let test: Vec<String> = tokenizer::parser(test_string);
-    //println!("{:?}", test);
-
+    let test: Vec<String> = tokenizer::parser(test_string);
+    println!("{:?}", test);
 
     //println!("{:?}", data);
     Ok(())
