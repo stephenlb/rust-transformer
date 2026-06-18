@@ -5,7 +5,7 @@ use tch::{Tensor, Kind};
 pub struct Tokenizer {
     encoder: HashMap<String, i64>,
     decoder: HashMap<i64, String>,
-    pub vocab: i64,
+    pub length: i64,
 }
 
 pub fn parser(text: &str) -> Vec<String> {
@@ -38,7 +38,7 @@ impl Tokenizer {
         Self {
             encoder,
             decoder,
-            vocab: words.len() as i64,
+            length: words.len() as i64,
         }
     }
     
@@ -59,7 +59,6 @@ impl Tokenizer {
             .map(|token| self.decoder.get(&token).unwrap().as_str().to_string())
             .collect()
     }
-
 }
 
 /*

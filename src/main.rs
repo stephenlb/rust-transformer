@@ -21,10 +21,11 @@ TODO - ✅ Tokenizer Character level
 TODO - ✅ Upgraded Tokenizer ( Word-level tokens )
 TODO - ✅ Decide on Architecture Abstraction approach
 TODO - ✅ Embedding
+TODO - ✅ Attention
+TODO - Positional Encodings
+TODO - Multi-headed Attention
 TODO - Transformer Head
 TODO - Transformer Block
-TODO - Attention Alogo
-TODO - Positional Encodings
 TODO - Model Network Projections
 TODO - Multi-headed reshape 2x
 TODO - FForward ( MLP )
@@ -40,7 +41,7 @@ fn main() -> Result<()> {
     // TODO use actual data
     let data: String = fs::read_to_string("data/training.txt")?;
     let test_string: &str ="Thank you Kyle ";
-    let dictionary = Tokenizer::new(test_string);
+    let dictionary = Tokenizer::new(&data);
     let tokens: Tensor = dictionary.encode(test_string);
     //let tokens = tokens.to_device(device);
     tokens.print();
