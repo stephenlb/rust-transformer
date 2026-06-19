@@ -1,6 +1,6 @@
 use regex::Regex;
 use std::collections::HashMap;
-use tch::{Tensor, Kind};
+use tch::{Kind, Tensor};
 
 pub struct Tokenizer {
     encoder: HashMap<String, i64>,
@@ -10,7 +10,8 @@ pub struct Tokenizer {
 
 pub fn parser(text: &str) -> Vec<String> {
     let matcher = Regex::new(r"\w+|.").unwrap();
-    let words: Vec<String> = matcher.find_iter(text)
+    let words: Vec<String> = matcher
+        .find_iter(text)
         .map(|word| word.as_str().to_string())
         .collect();
     return words;
@@ -41,7 +42,7 @@ impl Tokenizer {
             length: words.len() as i64,
         }
     }
-    
+
     pub fn encode(&self, text: &str) -> Tensor {
         let tokens: Vec<i64> = parser(text)
             .iter()
@@ -60,28 +61,3 @@ impl Tokenizer {
             .collect()
     }
 }
-
-/*
-    let text = "Hello, Rust!";
-
-    // 1. Tokenize into individual characters
-    let tokens: Vec<char> = text.chars().collect();
-    
-    // 2. Convert characters into unique numerical token IDs
-    let token_ids: Vec<u32> = tokens.iter().map(|&c| c as u32).collect();
-
-    println!("Text:   \"{}\"", text);
-    println!("Tokens: {:?}", tokens);
-    println!("IDs:    {:?}", token_ids);
-
-
-use regex::Regex;
-let text = "Hello, world! 123.";
-let re = Regex::new(r"\w+|.").unwrap();
-let tokens: Vec<&str> = re.find_iter(text)
-    .map(|m| m.as_str())
-    .collect();
-
-
-
-*/
