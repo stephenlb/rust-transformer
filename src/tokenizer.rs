@@ -44,12 +44,18 @@ impl Tokenizer {
     }
 
     // TODO batch
-    pub fn encode(&self, text: &str) -> Tensor {
-        let tokens: Vec<i64> = parser(text)
+    pub fn encode(&self, batch: Vec<&str>) -> Tensor {
+        let tokens: Vec<Vec<i64>> = batch
             .iter()
-            .filter_map(|c| self.encoder.get(c).copied())
+            .map(|text|
+                parser(text)
+                    .iter()
+                    .filter_map(|word| self.encoder.get(word).copied())
+                    .collect()
+            )
             .collect();
-        return Tensor::from_slice(&tokens);
+
+        return Tensor::from_slice2(&tokens);
     }
 
     //                   batch seq probs <- TODO

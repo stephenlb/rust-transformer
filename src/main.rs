@@ -41,7 +41,8 @@ fn main() -> Result<()> {
 
     let transformer = Transformer::new(&root, device, dictionary, 1, 128, 0.1);
 
-    let out: Tensor = transformer.forward(test_string);
+    // TODO optimize 
+    let out: Tensor = transformer.forward([test_string].to_vec());
     out.print();
 
     //let tokens: Tensor = dictionary.encode(test_string);

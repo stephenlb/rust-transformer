@@ -42,7 +42,7 @@ impl Transformer {
         return Transformer {
             tokenizer: tokenizer,
             embedding: embedding("embedding", vs, vocab, dims),
-            positional_encoding: PositionalEncoding::new(vs, dims, None),
+            positional_encoding: PositionalEncoding::new(vs, device, dims, None),
             // TODO
             // TODO
             // TODO add LayerNorm before projection
@@ -65,29 +65,47 @@ impl Transformer {
         };
     }
 
-    pub fn forward(&self, text: &str) -> Tensor {
-        let tokens: Tensor = self.tokenizer.encode(text);
-        let embedding: Tensor = self.embedding.forward(&tokens);
-        let positions: Tensor = self.positional_encoding.forward(embedding);
-        return positions;
+    pub fn forward(&self, batch: Vec<&str>) -> Tensor {
+        //return Tensor::from_slice(&[1,2,3]);
+        let tokens: Tensor = self.tokenizer.encode(batch);
+        return tokens;
+        //let embedding: Tensor = self.embedding.forward(&tokens);
+        //let positions: Tensor = self.positional_encoding.forward(embedding);
+        //return positions;
     }
 }
 
 struct PositionalEncoding {
     embedding: nn::Embedding,
+    device: Device,
 }
 
 impl PositionalEncoding {
-    fn new(vs: &Path, dims: i64, max_tokens: Option<i64>) -> Self {
+    fn new(vs: &Path, device: Device, dims: i64, max_tokens: Option<i64>) -> Self {
         let max_tokens: i64 = max_tokens.unwrap_or(5000);
         return Self {
-            embedding: embedding("positions", vs, dims, max_tokens),
+            device: device,
+            embedding: embedding("positions", vs, max_tokens, dims),
         }
     }
 
     fn forward(&self, inputs: Tensor) -> Tensor {
+        let size = inputs.size();
+        let options = (Kind::Int64, self.device);
+        let range: Tensor = Tensor::arange(size[0], options);
+        let positions = self.embedding.forward(&range);//.unsqueeze(0);
+
+        /*
+        println!("Range Size:{:?}", range.size());
+        dbg!(range);
+        println!("Positions Size:{:?}", positions.size());
+        dbg!(&positions);
+        println!("Inputs Size: {:?}", inputs.size());
+        dbg!(&inputs);
+        */
+        
         // TODO add positions
-        return inputs;
+        return inputs + positions;
     }
 }
 
