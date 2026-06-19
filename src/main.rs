@@ -16,6 +16,7 @@ TODO - ✅ Upgraded Tokenizer ( Word-level tokens )
 TODO - ✅ Decide on Architecture Abstraction approach
 TODO - ✅ Embedding
 TODO - ✅ Attention
+TODO - Use Tiktokenizer with gpt encoding - @amzadhossain
 TODO - Positional Encodings
 TODO - Multi-headed Attention
 TODO - Transformer Head

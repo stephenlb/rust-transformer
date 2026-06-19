@@ -43,6 +43,7 @@ impl Tokenizer {
         }
     }
 
+    // TODO batch
     pub fn encode(&self, text: &str) -> Tensor {
         let tokens: Vec<i64> = parser(text)
             .iter()

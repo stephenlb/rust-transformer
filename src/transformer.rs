@@ -5,7 +5,7 @@ use tch::{Device, Kind, Tensor, nn, nn::Module, nn::Path};
 pub struct Transformer {
     tokenizer: Tokenizer,
     embedding: nn::Embedding,
-    positional_encoding: nn::Embedding,
+    positional_encoding: PositionalEncoding,
     query_projection: nn::Linear,
     key_projection: nn::Linear,
     value_projection: nn::Linear,
@@ -20,14 +20,6 @@ pub struct Transformer {
     dims: i64,
     dropout: f64,
     training: bool,
-}
-
-struct TransformerBlock {
-    device: Device,
-    heads: Tensor,
-    dims: i64,
-    dropout: f64,
-    training: bool, // TODO <- implem,ent better fn training() / eval()
 }
 
 fn embedding(name: &str, vs: &Path, vocab: i64, dims: i64) -> nn::Embedding {
@@ -46,16 +38,25 @@ impl Transformer {
         dims: i64,
         dropout: f64,
     ) -> Self {
+        let vocab = tokenizer.length;
         return Transformer {
-            embedding: embedding("embedding", vs, tokenizer.length, dims),
-            positional_encoding: embedding("positional encoding", vs, dims, dims),
             tokenizer: tokenizer,
+            embedding: embedding("embedding", vs, vocab, dims),
+            positional_encoding: PositionalEncoding::new(vs, dims, None),
+            // TODO
+            // TODO
+            // TODO add LayerNorm before projection
+            // TODO
+            // TODO
             query_projection: linear("query", vs, dims, dims),
             key_projection: linear("key", vs, dims, dims),
             value_projection: linear("value", vs, dims, dims),
+            // TODO add LayerNorms
             //blocks: Vec<TransformerBlock>,
+            // TODO add LayerNorms
+            //out = self.norm2(inputs + attn)
+            //out = self.norm3(out + self.feedforward(out))
             output_projection: linear("output", vs, dims, dims),
-
             device: device,
             heads: Tensor::from(heads),
             dims: dims,
@@ -66,9 +67,47 @@ impl Transformer {
 
     pub fn forward(&self, text: &str) -> Tensor {
         let tokens: Tensor = self.tokenizer.encode(text);
-        return tokens;
-        //let out: Tensor = self.embedding(tokens);
+        let embedding: Tensor = self.embedding.forward(&tokens);
+        //let positions: Tensor = self.positional_encoding.forward(&embedding);
+        return embedding;
     }
+}
+
+struct PositionalEncoding {
+    embedding: nn::Embedding,
+}
+
+impl PositionalEncoding {
+    fn new(vs: &Path, dims: i64, max_tokens: Option<i64>) -> Self {
+        let max_tokens: i64 = max_tokens.unwrap_or(5000);
+        return Self {
+            embedding: embedding("positions", vs, dims, max_tokens),
+        }
+    }
+
+    fn forward(inputs: Tensor) -> Tensor {
+        // TODO add positions
+        return inputs;
+    }
+}
+
+/*
+class PositionalEncoding(torch.nn.Module):
+    def __init__(self, dims, max_tokens=5000):
+        super().__init__()
+        self.embedding = torch.nn.Embedding(max_tokens, dims)
+
+    def forward(self, x):
+        positions = torch.arange(x.shape[1], device=x.device)
+        return x + self.embedding(positions).unsqueeze(0)
+*/
+
+struct TransformerBlock {
+    device: Device,
+    heads: Tensor,
+    dims: i64,
+    dropout: f64,
+    training: bool, // TODO <- implem,ent better fn training() / eval()
 }
 
 impl TransformerBlock {
