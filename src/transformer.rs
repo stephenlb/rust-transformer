@@ -68,8 +68,8 @@ impl Transformer {
     pub fn forward(&self, text: &str) -> Tensor {
         let tokens: Tensor = self.tokenizer.encode(text);
         let embedding: Tensor = self.embedding.forward(&tokens);
-        //let positions: Tensor = self.positional_encoding.forward(&embedding);
-        return embedding;
+        let positions: Tensor = self.positional_encoding.forward(embedding);
+        return positions;
     }
 }
 
@@ -85,7 +85,7 @@ impl PositionalEncoding {
         }
     }
 
-    fn forward(inputs: Tensor) -> Tensor {
+    fn forward(&self, inputs: Tensor) -> Tensor {
         // TODO add positions
         return inputs;
     }
