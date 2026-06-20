@@ -16,8 +16,8 @@ TODO - ✅ Upgraded Tokenizer ( Word-level tokens )
 TODO - ✅ Decide on Architecture Abstraction approach
 TODO - ✅ Embedding
 TODO - ✅ Attention
+TODO - ✅ Positional Encodings
 TODO - Use Tiktokenizer with gpt encoding - @amzadhossain
-TODO - Positional Encodings
 TODO - Multi-headed Attention
 TODO - Transformer Head
 TODO - Transformer Block
@@ -37,20 +37,19 @@ fn main() -> Result<()> {
     // TODO use actual data
     let data: String = fs::read_to_string("data/training.txt")?;
     let test_string: &str = "Thank you Kyle ";
-    let dictionary = Tokenizer::new(&data);
-
-    let transformer = Transformer::new(&root, device, dictionary, 1, 128, 0.1);
+    let tokenizer = Tokenizer::new(&data);
+    let transformer = Transformer::new(&root, device, tokenizer, 1, 128, 0.1);
 
     // TODO optimize 
     let out: Tensor = transformer.forward([test_string].to_vec());
     out.print();
 
-    //let tokens: Tensor = dictionary.encode(test_string);
+    //let tokens: Tensor = tokenizer.encode(test_string);
     //let tokens = tokens.to_device(device);
     //tokens.print();
     //println!("{}", data.len());
 
-    //let decoded = dictionary.decode(tokens);
+    //let decoded = tokenizer.decode(tokens);
     //println!("'{decoded}'");
 
     //let test: Vec<String> = tokenizer::parser(test_string);

@@ -36,14 +36,15 @@ impl Tokenizer {
             decoder.insert(token, word.to_string());
         }
 
+        let length = decoder.len() as i64;
         Self {
             encoder,
             decoder,
-            length: words.len() as i64,
+            length,
         }
     }
 
-    // TODO batch
+    // TODO Slice &[&str] instead of Vec<>
     pub fn encode(&self, batch: Vec<&str>) -> Tensor {
         let tokens: Vec<Vec<i64>> = batch
             .iter()
