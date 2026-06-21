@@ -30,6 +30,7 @@ impl Transformer {
         vs: &Path,
         device: Device,
         tokenizer: Tokenizer,
+        number_of_blocks: i64,
         heads: i64,
         dims: i64,
         dropout: f64,
@@ -53,9 +54,8 @@ impl Transformer {
     pub fn forward(&self, batch: Vec<&str>) -> Tensor {
         let tokens: Tensor = self.tokenizer.encode(batch);
         let embedding: Tensor = self.embedding.forward(&tokens);
-
         let mut out: Tensor = self.positional_encoding.forward(embedding);
-        //return self.blocks[0].forward(out);
+
         for block in &self.blocks {
             out = block.forward(out);
         }
@@ -109,7 +109,7 @@ impl TransformerBlock {
     pub fn new(name: &str, vs: &Path, device: Device, heads: i64, dims: i64, dropout: f64) -> Self {
         Self {
             device,
-            heads: Tensor::from(4),
+            heads: Tensor::from(heads),
             dims,
             dropout,
             training: true,
@@ -173,7 +173,7 @@ impl TransformerBlock {
             //.transpose(1, 2)
             //.contiguous()
             .reshape(&[B, S, F]);
-        let out = self.attention_projection.forward(&attn);
+        let out = self.attention_projection.forward(&attn).dropout(self.dropout, self.training);
         return out;
     }
 }
