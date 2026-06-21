@@ -6,13 +6,8 @@ pub struct Transformer {
     tokenizer: Tokenizer,
     embedding: nn::Embedding,
     positional_encoding: PositionalEncoding,
-    //blocks: Vec<TransformerBlock>,
-    block: TransformerBlock,
+    blocks: Vec<TransformerBlock>,
     output_projection: nn::Linear,
-    // RMS Norm x = x/(x*x+e)
-    // norm1: nn::LayerNorm,
-    // norm2: nn::LayerNorm,
-    // norm3: nn::LayerNorm,
     device: Device,
     heads: Tensor,
     dims: i64,
@@ -40,22 +35,12 @@ impl Transformer {
         dropout: f64,
     ) -> Self {
         let vocab = tokenizer.length;
-        // TODO Bblock Vec<>
+        let blocks: Vec<TransformerBlock> = (0..3).map(|n|TransformerBlock::new(&format!("mblock{n}"), vs, device, 1, dims, dropout)).collect();
         return Transformer {
             tokenizer: tokenizer,
             embedding: embedding("embedding", vs, vocab, dims),
             positional_encoding: PositionalEncoding::new(vs, device, dims, None),
-            // TODO
-            // TODO
-            // TODO add LayerNorm before projection
-            // TODO
-            // TODO
-            block: TransformerBlock::new("block1", vs, device, 1, dims, dropout),
-            // TODO add LayerNorms
-            //blocks: Vec<TransformerBlock>,
-            // TODO add LayerNorms
-            //out = self.norm2(inputs + attn)
-            //out = self.norm3(out + self.feedforward(out))
+            blocks: blocks,
             output_projection: linear("output", vs, dims, dims),
             device: device,
             heads: Tensor::from(heads),
@@ -68,10 +53,15 @@ impl Transformer {
     pub fn forward(&self, batch: Vec<&str>) -> Tensor {
         let tokens: Tensor = self.tokenizer.encode(batch);
         let embedding: Tensor = self.embedding.forward(&tokens);
-        let positions: Tensor = self.positional_encoding.forward(embedding);
-        let attention = self.block.forward(positions);
 
-        return attention;
+        let mut out: Tensor = self.positional_encoding.forward(embedding);
+        //return self.blocks[0].forward(out);
+        for block in &self.blocks {
+            out = block.forward(out);
+        }
+
+        let out = self.output_projection.forward(&out);
+        return out;
     }
 }
 
@@ -94,8 +84,6 @@ impl PositionalEncoding {
         let options = (Kind::Int64, self.device);
         let range: Tensor = Tensor::arange(size[1], options);
         let positions = self.embedding.forward(&range);//.unsqueeze(0);
-
-        // TODO add positions
         return inputs + positions;
     }
 }
@@ -109,72 +97,83 @@ struct TransformerBlock {
     query_projection: nn::Linear,
     key_projection: nn::Linear,
     value_projection: nn::Linear,
+    attention_projection: nn::Linear,
     norm1: nn::LayerNorm,
     norm2: nn::LayerNorm,
     norm3: nn::LayerNorm,
+    linear1: nn::Linear,
+    linear2: nn::Linear,
 }
 
 impl TransformerBlock {
     pub fn new(name: &str, vs: &Path, device: Device, heads: i64, dims: i64, dropout: f64) -> Self {
         Self {
             device,
-            heads: Tensor::from(1),
+            heads: Tensor::from(4),
             dims,
             dropout,
             training: true,
             query_projection: linear("query", vs, dims, dims),
             key_projection: linear("key", vs, dims, dims),
             value_projection: linear("value", vs, dims, dims),
+            attention_projection: linear("attention", vs, dims, dims),
             norm1: norm("norm1", vs, dims),
             norm2: norm("norm2", vs, dims),
             norm3: norm("norm3", vs, dims),
+            linear1: linear("query", vs, dims, dims),
+            linear2: linear("query", vs, dims, dims),
         }
     }
 
-/*
-    def forward(self, inputs):
-        out = self.norm1(inputs)
-        out = self.qkv_projection(out) ### <-- Cache is here
-        query, key, value = out.chunk(3, dim=-1)
-        ## can cache all three? QK and V?
-        ## @computer_vision said ONLY K and V
-        attn = self.attention(query, key, value) 
-        out = self.norm2(inputs + attn)
-        out = self.norm3(out + self.feedforward(out))
-        return out
-
-*/
     pub fn forward(&self, input: Tensor) -> Tensor {
-        // TODO LayerNorm
         let out = self.norm1.forward(&input);
         let query = self.query_projection.forward(&out);
         let key = self.key_projection.forward(&out);
         let value = self.value_projection.forward(&out);
         let attention = self.attention(query, key, value);
+        //return attention;
         let attention = self.norm2.forward(&(input + attention));
-        // TODO FEED FORWARD ( 
-        return attention;
-        // TODO LayerNorm
-        // TODO LayerNorm
+        let out = self.linear1.forward(&attention).gelu("tanh");
+        let out = self.linear2.forward(&out);
+        // TODO review do we want to (inputs + out) instead?
+        let out = self.norm3.forward(&(attention + out));
+
+        // @SquirrelSniper138
+        // Standard 2-Layer FFN Structure
+        // let ffn1 = self.linear1.forward(&attention).gelu("tanh");
+        // let ffn2 = self.linear2.forward
+
+        return out;
     }
 
     fn causual_mask(&self, size: i64) -> Tensor {
         Tensor::ones(&[size, size], (Kind::Float, self.device)).tril(0)
     }
 
-    // TODO multi-headed Attention
-    // TODO LayerNorm
+    // TODO ✅ multi-headed Attention
+    // TODO ✅ LayerNorm
     fn attention(&self, query: Tensor, key: Tensor, value: Tensor) -> Tensor {
         let (B, S, F) = query.size3().unwrap_or((1,1,1));
-        println!("Shape of query: {B} {S} {F}");
-        let out = query.matmul(&key.transpose(1, 2));
+        let heads = i64::try_from(&self.heads).unwrap_or(1);
+        let head_dims = F / heads;
+        let multihead = [B, S, heads, head_dims];
+        let query = query.view(multihead).transpose(1, 2);
+        let key = key.view(multihead).transpose(1, 2);
+        let value = value.view(multihead).transpose(1, 2);
+        let out = query.matmul(&key.transpose(-2, -1));
         let out = out / self.heads.sqrt();
         let mask = self.causual_mask(S);
         let attn = out.masked_fill(&mask.eq(0.), f64::NEG_INFINITY);
         let attn = attn.softmax(-1, Kind::Float);
         let attn = attn.dropout(self.dropout, self.training);
-        let attn = attn.matmul(&value);
-
-        return attn;
+        let attn = attn.matmul(&value)
+            // @SquirrelSniper138 thank you! ❤️
+            // Fix: Remove the inner transpose on value
+            // exclude inner transpose for value
+            //.transpose(1, 2)
+            //.contiguous()
+            .reshape(&[B, S, F]);
+        let out = self.attention_projection.forward(&attn);
+        return out;
     }
 }

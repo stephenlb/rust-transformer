@@ -38,9 +38,14 @@ fn main() -> Result<()> {
     let data: String = fs::read_to_string("data/training.txt")?;
     let test_string: &str = "Thank you Kyle ";
     let tokenizer = Tokenizer::new(&data);
-    let transformer = Transformer::new(&root, device, tokenizer, 1, 128, 0.1);
+    let transformer = Transformer::new(&root, device, tokenizer, 4, 128, 0.1);
 
-    // TODO optimize 
+    // TODO Batching - Shuffle
+    // TODO define optimizer AdamW
+    // TODO Criterean cross_entropy_loss_with_logits
+    // TODO write the training loop 
+
+    // TODO Start the optimization loop here
     let out: Tensor = transformer.forward([test_string].to_vec());
     out.print();
 
