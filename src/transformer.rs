@@ -1,8 +1,10 @@
 use crate::tokenizer::Tokenizer;
+use rand;
 use tch;
 use tch::{Device, Kind, Tensor, nn, nn::Module, nn::Path};
 
 pub struct Transformer {
+    context_size: i64,
     tokenizer: Tokenizer,
     embedding: nn::Embedding,
     positional_encoding: PositionalEncoding,
@@ -25,10 +27,17 @@ fn norm(name: &str, vs: &Path, dims: i64) -> nn::LayerNorm {
     tch::nn::layer_norm(vs / name, vec![dims], Default::default())
 }
 
+
+struct Training {
+    features: Tensor,
+    labels: Tensor,
+}
+
 impl Transformer {
     pub fn new(
         vs: &Path,
         device: Device,
+        context_size: i64,
         tokenizer: Tokenizer,
         number_of_blocks: i64,
         heads: i64,
@@ -38,6 +47,7 @@ impl Transformer {
         let vocab = tokenizer.length;
         let blocks: Vec<TransformerBlock> = (0..3).map(|n|TransformerBlock::new(&format!("mblock{n}"), vs, device, 1, dims, dropout)).collect();
         return Transformer {
+            context_size: context_size,
             tokenizer: tokenizer,
             embedding: embedding("embedding", vs, vocab, dims),
             positional_encoding: PositionalEncoding::new(vs, device, dims, None),
@@ -62,6 +72,41 @@ impl Transformer {
 
         let out = self.output_projection.forward(&out);
         return out;
+    }
+
+    pub fn train(&self, data: &str, epochs: i64, batches: i64, batch_size: usize) {
+        let data_len: f64 = data.len() as f64;
+        let tokens: Tensor = self.tokenizer.encode(vec![&data]);
+        let rand1: f64 = rand::random();
+        let rand2: f64 = rand::random();
+        let min_window: usize = 10;
+
+        for epoch in 0..epochs {
+            let training: Vec<Training> = (0..batch_size)
+                .map(|a| {
+                    // window_size: 10 to 510
+                    let window_size: usize = min_window + (rand1 * 500.0) as usize;
+
+                    // window_start: 0 to data_len - window_size - 1
+                    let mut window_start: usize = ((rand2 * data_len) as usize) - window_size - 1;
+                    if window_start < 0 {
+                        window_start = 0;
+                    }
+                    Training {
+                        features: self.tokenizer.encode(vec![&data[window_start..window_size]]),
+                        labels: Tensor::from(a as f64),
+                    }
+                })
+                .collect();
+            for b in 0..batches {
+            }
+        }
+        
+
+        // TODO Batching - Shuffle
+        // TODO define optimizer AdamW
+        // TODO Criterean cross_entropy_loss_with_logits
+        // TODO write the training loop 
     }
 }
 

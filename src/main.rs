@@ -10,6 +10,7 @@ use std::fs;
 use tch::{Device, Reduction, Tensor, nn::Module, nn::VarStore};
 
 /*
+TODO - All Stephen's voice transcripts- Train on this data
 TODO - ✅ Load Data
 TODO - ✅ Tokenizer Character level
 TODO - ✅ Upgraded Tokenizer ( Word-level tokens )
@@ -17,16 +18,16 @@ TODO - ✅ Decide on Architecture Abstraction approach
 TODO - ✅ Embedding
 TODO - ✅ Attention
 TODO - ✅ Positional Encodings
-TODO - Use Tiktokenizer with gpt encoding - @amzadhossain
-TODO - Multi-headed Attention
-TODO - Transformer Head
-TODO - Transformer Block
-TODO - Model Network Projections
-TODO - Multi-headed reshape 2x
-TODO - FForward ( MLP )
-TODO - 3x LayerNorms
+TODO - ✅ Multi-headed Attention
+TODO - ✅ Transformer Head
+TODO - ✅ Transformer Block
+TODO - ✅ Model Network Projections
+TODO - ✅ Multi-headed reshape 2x
+TODO - ✅ FForward ( MLP )
+TODO - ✅ 3x LayerNorms
 TODO - Trianing
 TODO - Batch and Shuffle
+TODO - Use Tiktokenizer with gpt encoding - @amzadhossain
 TODO -
 */
 
@@ -38,12 +39,10 @@ fn main() -> Result<()> {
     let data: String = fs::read_to_string("data/training.txt")?;
     let test_string: &str = "Thank you Kyle ";
     let tokenizer = Tokenizer::new(&data);
-    let transformer = Transformer::new(&root, device, tokenizer, 4, 4, 128, 0.1);
+    let transformer = Transformer::new(&root, device, 5000, tokenizer, 4, 4, 128, 0.1);
 
-    // TODO Batching - Shuffle
-    // TODO define optimizer AdamW
-    // TODO Criterean cross_entropy_loss_with_logits
-    // TODO write the training loop 
+    // Train the model on our data
+    transformer.train(&data, 1, 1, 128);
 
     // TODO Start the optimization loop here
     let out: Tensor = transformer.forward([test_string].to_vec());
