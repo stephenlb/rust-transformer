@@ -45,8 +45,8 @@ fn main() -> Result<()> {
     transformer.train(&data, 1, 1, 128);
 
     // TODO Start the optimization loop here
-    let out: Tensor = transformer.forward([test_string].to_vec());
-    out.print();
+    //let out: Tensor = transformer.forward([test_string].to_vec());
+    //out.print();
 
     //let tokens: Tensor = tokenizer.encode(test_string);
     //let tokens = tokens.to_device(device);

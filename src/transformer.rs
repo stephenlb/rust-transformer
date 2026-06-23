@@ -1,6 +1,7 @@
 use crate::tokenizer::Tokenizer;
 use rand;
 use tch;
+use tch::IndexOp;
 use tch::{Device, Kind, Tensor, nn, nn::Module, nn::Path};
 
 pub struct Transformer {
@@ -25,12 +26,6 @@ fn linear(name: &str, vs: &Path, in_dims: i64, out_dims: i64) -> nn::Linear {
 }
 fn norm(name: &str, vs: &Path, dims: i64) -> nn::LayerNorm {
     tch::nn::layer_norm(vs / name, vec![dims], Default::default())
-}
-
-
-struct Training {
-    features: Tensor,
-    labels: Tensor,
 }
 
 impl Transformer {
@@ -61,8 +56,13 @@ impl Transformer {
         };
     }
 
-    pub fn forward(&self, batch: Vec<&str>) -> Tensor {
+    pub fn predict(&self, batch: Vec<&str>) -> Tensor {
         let tokens: Tensor = self.tokenizer.encode(batch);
+        self.forward(tokens)
+    }
+
+    //[ batch [tokens] [tokens] [tokens] [tokens] ]
+    pub fn forward(&self, tokens: Tensor) -> Tensor {
         let embedding: Tensor = self.embedding.forward(&tokens);
         let mut out: Tensor = self.positional_encoding.forward(embedding);
 
@@ -75,33 +75,65 @@ impl Transformer {
     }
 
     pub fn train(&self, data: &str, epochs: i64, batches: i64, batch_size: usize) {
-        let data_len: f64 = data.len() as f64;
-        let tokens: Tensor = self.tokenizer.encode(vec![&data]);
-        let rand1: f64 = rand::random();
-        let rand2: f64 = rand::random();
+        let tokens: Vec<i64> = self.tokenizer.encode_one(&data);
         let min_window: usize = 10;
 
         for epoch in 0..epochs {
-            let training: Vec<Training> = (0..batch_size)
-                .map(|a| {
+            for batch in 0..batches {
+                let window_varience: f64 = rand::random();
+                let features: Vec<Vec<i64>> = (0..batch_size).map( |b| {
+                    let start_varience: f64 = rand::random();
+                    let window_size: usize = min_window + (window_varience * 500.0) as usize;
+                    let window_start: usize = (((start_varience * tokens.len() as f64)) as i64 - window_size as i64 - 1).max(0).try_into().unwrap_or(0);
+                    //tokens[1..10].to_vec()
+                    tokens[window_start .. window_start + window_size].to_vec()
+                }).collect();
+                //dbg!(features);
+                let features_tensor = Tensor::from_slice2(&features);
+                dbg!(features_tensor);
+                /*
+                for b in (0..batch_size) {
+                    let start_varience: f64 = rand::random();
                     // window_size: 10 to 510
-                    let window_size: usize = min_window + (rand1 * 500.0) as usize;
+                    let window_size: i64 = min_window + (window_varience * 500.0) as i64;
 
                     // window_start: 0 to data_len - window_size - 1
-                    let mut window_start: usize = ((rand2 * data_len) as usize) - window_size - 1;
+                    let mut window_start: i64 = ((start_varience * data_len)) as i64 - window_size - 1;
                     if window_start < 0 {
                         window_start = 0;
                     }
-                    Training {
-                        features: self.tokenizer.encode(vec![&data[window_start..window_size]]),
-                        labels: Tensor::from(a as f64),
-                    }
-                })
-                .collect();
-            for b in 0..batches {
+
+                    let feature: Tensor = tokens
+                        .i(window_start .. window_start + window_size);
+
+                    let label: Tensor = tokens
+                        .i(window_start + 1 .. window_start + window_size + 1);
+
+                    //features.stack(feature);
+                    //let features: Tensor = tch::Tensor::stack(&[features, feature], 0);
+                    // TODO Convert to batches
+                    // TODO Convert to batches
+                    // TODO Convert to batches
+                    // TODO Convert to batches
+                    // TODO Convert to batches
+                }
+                */
+
+                /*
+                let features: Vec<&str> = training
+                    .iter()
+                    .map(|t| &data[t.features.0 .. t.features.1] )
+                    .collect();
+
+                let labels: Vec<&str> = training
+                    .iter()
+                    .map(|t| &data[t.labels.0 .. t.labels.1])
+                    .collect();
+                    */
+
+                //let out = self.forward(features);
             }
         }
-        
 
         // TODO Batching - Shuffle
         // TODO define optimizer AdamW

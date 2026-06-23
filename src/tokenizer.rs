@@ -44,7 +44,14 @@ impl Tokenizer {
         }
     }
 
-    // TODO Slice &[&str] instead of Vec<>
+    pub fn encode_one(&self, text: &str) -> Vec<i64> {
+        let tokens: Vec<i64> = parser(text)
+            .iter()
+            .filter_map(|word| self.encoder.get(word).copied())
+            .collect();
+        tokens
+
+    }
     pub fn encode(&self, batch: Vec<&str>) -> Tensor {
         let tokens: Vec<Vec<i64>> = batch
             .iter()
