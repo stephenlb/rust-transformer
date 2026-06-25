@@ -32,17 +32,15 @@ TODO -
 */
 
 fn main() -> Result<()> {
-    let device = Device::Cpu;
+    let device = Device::Mps;
     let vs = VarStore::new(device);
-    let root = vs.root();
-    // TODO use actual data
-    let data: String = fs::read_to_string("data/training.txt")?;
+    let data: String = fs::read_to_string("data/stephen.txt")?;
     let test_string: &str = "Thank you Kyle ";
     let tokenizer = Tokenizer::new(&data);
-    let transformer = Transformer::new(&root, device, 5000, tokenizer, 4, 4, 128, 0.1);
+    let mut transformer = Transformer::new(&vs, device, 5000, tokenizer, 4, 4, 128, 0.1);
 
     // Train the model on our data
-    transformer.train(&data, 1, 1, 128);
+    transformer.train(&data, 400, 400, 32);
 
     // TODO Start the optimization loop here
     //let out: Tensor = transformer.forward([test_string].to_vec());

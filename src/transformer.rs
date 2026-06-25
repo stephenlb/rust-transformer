@@ -2,9 +2,11 @@ use crate::tokenizer::Tokenizer;
 use rand;
 use tch;
 use tch::IndexOp;
-use tch::{Device, Kind, Tensor, nn, nn::Module, nn::Path};
+use tch::{Device, Kind, Tensor, nn::Module, nn::Path};
+use tch::nn::{self, VarStore, OptimizerConfig};
 
 pub struct Transformer {
+    optimizer: nn::Optimizer,
     context_size: i64,
     tokenizer: Tokenizer,
     embedding: nn::Embedding,
@@ -28,9 +30,23 @@ fn norm(name: &str, vs: &Path, dims: i64) -> nn::LayerNorm {
     tch::nn::layer_norm(vs / name, vec![dims], Default::default())
 }
 
+struct BatchPair {
+    features : Vec<i64>,
+    labels : Vec<i64>,
+}
+
+fn cross_entropy_for_logits(
+    predictions: &Tensor,
+    targets: &Tensor,
+) -> Tensor {
+    predictions
+        .log_softmax(-1, Kind::Float)
+        .nll_loss(targets)
+}
+
 impl Transformer {
     pub fn new(
-        vs: &Path,
+        vs: &VarStore,
         device: Device,
         context_size: i64,
         tokenizer: Tokenizer,
@@ -39,17 +55,23 @@ impl Transformer {
         dims: i64,
         dropout: f64,
     ) -> Self {
+        let root = vs.root();
         let vocab = tokenizer.length;
-        let blocks: Vec<TransformerBlock> = (0..3).map(|n|TransformerBlock::new(&format!("mblock{n}"), vs, device, 1, dims, dropout)).collect();
+        let learing_rate = 1e-3;
+        let mut optimizer = nn::AdamW::default().build(&vs, learing_rate).unwrap();
+        let blocks: Vec<TransformerBlock> = (0..number_of_blocks)
+            .map(|n|TransformerBlock::new(&format!("mblock{n}"), &root, device, heads, dims, dropout))
+            .collect();
         return Transformer {
+            optimizer: optimizer,
             context_size: context_size,
             tokenizer: tokenizer,
-            embedding: embedding("embedding", vs, vocab, dims),
-            positional_encoding: PositionalEncoding::new(vs, device, dims, None),
+            embedding: embedding("embedding", &root, vocab, dims),
+            positional_encoding: PositionalEncoding::new(&root, device, dims, None),
             blocks: blocks,
-            output_projection: linear("output", vs, dims, dims),
+            output_projection: linear("output", &root, dims, vocab),
             device: device,
-            heads: Tensor::from(heads),
+            heads: Tensor::from(heads).to_device(device),
             dims: dims,
             dropout: dropout,
             training: true,
@@ -57,81 +79,67 @@ impl Transformer {
     }
 
     pub fn predict(&self, batch: Vec<&str>) -> Tensor {
-        let tokens: Tensor = self.tokenizer.encode(batch);
-        self.forward(tokens)
+        let tokens: Tensor = self.tokenizer.encode(batch).to_device(self.device);
+        self.forward(&tokens)
     }
 
     //[ batch [tokens] [tokens] [tokens] [tokens] ]
-    pub fn forward(&self, tokens: Tensor) -> Tensor {
+    pub fn forward(&self, tokens: &Tensor) -> Tensor {
         let embedding: Tensor = self.embedding.forward(&tokens);
-        let mut out: Tensor = self.positional_encoding.forward(embedding);
+        let mut out: Tensor = self.positional_encoding.forward(&embedding);
 
         for block in &self.blocks {
-            out = block.forward(out);
+            out = block.forward(&out);
         }
 
         let out = self.output_projection.forward(&out);
         return out;
     }
 
-    pub fn train(&self, data: &str, epochs: i64, batches: i64, batch_size: usize) {
+    pub fn train(&mut self, data: &str, epochs: i64, batches: i64, batch_size: usize) {
         let tokens: Vec<i64> = self.tokenizer.encode_one(&data);
         let min_window: usize = 10;
 
         for epoch in 0..epochs {
             for batch in 0..batches {
                 let window_varience: f64 = rand::random();
-                let features: Vec<Vec<i64>> = (0..batch_size).map( |b| {
+                let training_set: Vec<BatchPair> = (0..batch_size).map( |b| {
                     let start_varience: f64 = rand::random();
                     let window_size: usize = min_window + (window_varience * 500.0) as usize;
                     let window_start: usize = (((start_varience * tokens.len() as f64)) as i64 - window_size as i64 - 1).max(0).try_into().unwrap_or(0);
-                    //tokens[1..10].to_vec()
-                    tokens[window_start .. window_start + window_size].to_vec()
-                }).collect();
-                //dbg!(features);
-                let features_tensor = Tensor::from_slice2(&features);
-                dbg!(features_tensor);
-                /*
-                for b in (0..batch_size) {
-                    let start_varience: f64 = rand::random();
-                    // window_size: 10 to 510
-                    let window_size: i64 = min_window + (window_varience * 500.0) as i64;
 
-                    // window_start: 0 to data_len - window_size - 1
-                    let mut window_start: i64 = ((start_varience * data_len)) as i64 - window_size - 1;
-                    if window_start < 0 {
-                        window_start = 0;
+                    BatchPair {
+                        features: tokens[window_start .. window_start + window_size].to_vec(),
+                        labels: tokens[window_start + 1 .. window_start + window_size + 1].to_vec(),
                     }
+                }).collect();
 
-                    let feature: Tensor = tokens
-                        .i(window_start .. window_start + window_size);
+                let features: Vec<Vec<i64>> = training_set
+                    .iter()
+                    .map( |bp| bp.features.clone() )
+                    .collect();
 
-                    let label: Tensor = tokens
-                        .i(window_start + 1 .. window_start + window_size + 1);
+                let labels: Vec<Vec<i64>> = training_set
+                    .iter()
+                    .map( |bp| bp.labels.clone() )
+                    .collect();
 
-                    //features.stack(feature);
-                    //let features: Tensor = tch::Tensor::stack(&[features, feature], 0);
-                    // TODO Convert to batches
-                    // TODO Convert to batches
-                    // TODO Convert to batches
-                    // TODO Convert to batches
-                    // TODO Convert to batches
-                }
-                */
+                let features_tensor = Tensor::from_slice2(&features).to_device(self.device);
+                let labels_tensor = Tensor::from_slice2(&labels).to_device(self.device);
 
+                self.optimizer.zero_grad();
+                let out = self.forward(&features_tensor);
+                //out.print();
                 /*
-                let features: Vec<&str> = training
-                    .iter()
-                    .map(|t| &data[t.features.0 .. t.features.1] )
-                    .collect();
-
-                let labels: Vec<&str> = training
-                    .iter()
-                    .map(|t| &data[t.labels.0 .. t.labels.1])
-                    .collect();
-                    */
-
-                //let out = self.forward(features);
+                let (B, S, L) = out.size3().unwrap_or((1,1,1));
+                let loss = cross_entropy_for_logits(
+                    &out.view([B * S, L]),
+                    &labels_tensor.view([B * S]),
+                );
+                loss.print();
+                loss.backward(); // calculate gradients
+                self.optimizer.step(); // optimze "learning"
+                */
             }
         }
 
@@ -156,7 +164,7 @@ impl PositionalEncoding {
         }
     }
 
-    fn forward(&self, inputs: Tensor) -> Tensor {
+    fn forward(&self, inputs: &Tensor) -> Tensor {
         let size = inputs.size();
         let options = (Kind::Int64, self.device);
         let range: Tensor = Tensor::arange(size[1], options);
@@ -197,17 +205,18 @@ impl TransformerBlock {
             norm1: norm("norm1", vs, dims),
             norm2: norm("norm2", vs, dims),
             norm3: norm("norm3", vs, dims),
-            linear1: linear("query", vs, dims, dims),
-            linear2: linear("query", vs, dims, dims),
+            linear1: linear("linear1", vs, dims, dims),
+            linear2: linear("linear2", vs, dims, dims),
         }
     }
 
-    pub fn forward(&self, input: Tensor) -> Tensor {
-        let out = self.norm1.forward(&input);
+    pub fn forward(&self, input: &Tensor) -> Tensor {
+        let out = self.norm1.forward(input);
         let query = self.query_projection.forward(&out);
         let key = self.key_projection.forward(&out);
         let value = self.value_projection.forward(&out);
-        let attention = self.attention(query, key, value);
+        let attention = self.attention(&query, &key, &value);
+        return out;
         //return attention;
         let attention = self.norm2.forward(&(input + attention));
         let out = self.linear1.forward(&attention).gelu("tanh");
@@ -227,9 +236,12 @@ impl TransformerBlock {
         Tensor::ones(&[size, size], (Kind::Float, self.device)).tril(0)
     }
 
-    // TODO ✅ multi-headed Attention
-    // TODO ✅ LayerNorm
-    fn attention(&self, query: Tensor, key: Tensor, value: Tensor) -> Tensor {
+    // TODO *** LEAK HERE!! maybe***
+    // TODO *** LEAK HERE!! maybe***
+    // TODO *** LEAK HERE!! maybe***
+    // TODO *** LEAK HERE!! maybe***
+    fn attention(&self, query: &Tensor, key: &Tensor, value: &Tensor) -> Tensor {
+        //return Tensor::from_slice(&[1]);
         let (B, S, F) = query.size3().unwrap_or((1,1,1));
         let heads = i64::try_from(&self.heads).unwrap_or(1);
         let head_dims = F / heads;
@@ -238,17 +250,14 @@ impl TransformerBlock {
         let key = key.view(multihead).transpose(1, 2);
         let value = value.view(multihead).transpose(1, 2);
         let out = query.matmul(&key.transpose(-2, -1));
-        let out = out / self.heads.sqrt();
+        let out = out / (head_dims as f64).sqrt();
         let mask = self.causual_mask(S);
         let attn = out.masked_fill(&mask.eq(0.), f64::NEG_INFINITY);
         let attn = attn.softmax(-1, Kind::Float);
         let attn = attn.dropout(self.dropout, self.training);
         let attn = attn.matmul(&value)
-            // @SquirrelSniper138 thank you! ❤️
-            // Fix: Remove the inner transpose on value
-            // exclude inner transpose for value
-            //.transpose(1, 2)
-            //.contiguous()
+            .transpose(1, 2)
+            .contiguous()
             .reshape(&[B, S, F]);
         let out = self.attention_projection.forward(&attn).dropout(self.dropout, self.training);
         return out;
