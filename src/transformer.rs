@@ -44,6 +44,13 @@ fn cross_entropy_for_logits(
         .nll_loss(targets)
 }
 
+fn tensor_to_f64(tensor: &Tensor) -> f64 {
+    tensor.double_value(&[])
+}
+fn tensor_to_i64(tensor: &Tensor) -> i64 {
+    tensor.int64_value(&[])
+}
+
 impl Transformer {
     pub fn new(
         vs: &VarStore,
@@ -62,7 +69,8 @@ impl Transformer {
         let blocks: Vec<TransformerBlock> = (0..number_of_blocks)
             .map(|n|TransformerBlock::new(&format!("mblock{n}"), &root, device, heads, dims, dropout))
             .collect();
-        return Transformer {
+
+        Transformer {
             optimizer: optimizer,
             context_size: context_size,
             tokenizer: tokenizer,
@@ -75,7 +83,7 @@ impl Transformer {
             dims: dims,
             dropout: dropout,
             training: true,
-        };
+        }
     }
 
     pub fn predict(&self, batch: Vec<&str>) -> Tensor {
@@ -93,19 +101,23 @@ impl Transformer {
         }
 
         let out = self.output_projection.forward(&out);
-        return out;
+        out
     }
 
-    pub fn train(&mut self, data: &str, epochs: i64, batches: i64, batch_size: usize) {
+    pub fn train(
+        &mut self,
+        data: &str,
+        epochs: i64,
+        batches: i64,
+        batch_size: usize,
+        window_size: usize,
+    ) {
         let tokens: Vec<i64> = self.tokenizer.encode_one(&data);
-        let min_window: usize = 10;
 
         for epoch in 0..epochs {
             for batch in 0..batches {
-                let window_varience: f64 = rand::random();
                 let training_set: Vec<BatchPair> = (0..batch_size).map( |b| {
                     let start_varience: f64 = rand::random();
-                    let window_size: usize = min_window + (window_varience * 500.0) as usize;
                     let window_start: usize = (((start_varience * tokens.len() as f64)) as i64 - window_size as i64 - 1).max(0).try_into().unwrap_or(0);
 
                     BatchPair {
@@ -129,24 +141,38 @@ impl Transformer {
 
                 self.optimizer.zero_grad();
                 let out = self.forward(&features_tensor);
-                //out.print();
-                /*
                 let (B, S, L) = out.size3().unwrap_or((1,1,1));
                 let loss = cross_entropy_for_logits(
                     &out.view([B * S, L]),
                     &labels_tensor.view([B * S]),
                 );
-                loss.print();
+                
+                println!("Loss {}", tensor_to_f64(&loss));
                 loss.backward(); // calculate gradients
                 self.optimizer.step(); // optimze "learning"
-                */
             }
         }
+    }
 
-        // TODO Batching - Shuffle
-        // TODO define optimizer AdamW
-        // TODO Criterean cross_entropy_loss_with_logits
-        // TODO write the training loop 
+    pub fn chat(&self, message: &str, max_response: i64) -> String {
+        let mut message: String = String::from(message);
+        let mut words: String = String::from("");
+        for _ in (0..max_response) {
+            let tokens = self.tokenizer.encode(vec![&message]).to_device(self.device);
+            let output = self.forward(&tokens);
+            let logits = output.i((.., -1, ..));
+            let token: Tensor = logits
+               .softmax(-1, Kind::Float)
+               .multinomial(1, true);
+            let word = self.tokenizer.decode(token.view(1));
+            message.push_str(&format!(" {word}"));
+            words.push_str(&word);
+        }
+        println!("Reply: {words}.");
+        //token.print();
+        //println!("{word}");
+        //"no/thing to see here yet".to_string()
+        words
     }
 }
 
@@ -158,7 +184,7 @@ struct PositionalEncoding {
 impl PositionalEncoding {
     fn new(vs: &Path, device: Device, dims: i64, max_tokens: Option<i64>) -> Self {
         let max_tokens: i64 = max_tokens.unwrap_or(5000);
-        return Self {
+        Self {
             device: device,
             embedding: embedding("positions", vs, max_tokens, dims),
         }
@@ -169,7 +195,8 @@ impl PositionalEncoding {
         let options = (Kind::Int64, self.device);
         let range: Tensor = Tensor::arange(size[1], options);
         let positions = self.embedding.forward(&range);//.unsqueeze(0);
-        return inputs + positions;
+
+        inputs + positions
     }
 }
 
@@ -216,32 +243,19 @@ impl TransformerBlock {
         let key = self.key_projection.forward(&out);
         let value = self.value_projection.forward(&out);
         let attention = self.attention(&query, &key, &value);
-        return out;
-        //return attention;
         let attention = self.norm2.forward(&(input + attention));
         let out = self.linear1.forward(&attention).gelu("tanh");
         let out = self.linear2.forward(&out);
-        // TODO review do we want to (inputs + out) instead?
         let out = self.norm3.forward(&(attention + out));
 
-        // @SquirrelSniper138
-        // Standard 2-Layer FFN Structure
-        // let ffn1 = self.linear1.forward(&attention).gelu("tanh");
-        // let ffn2 = self.linear2.forward
-
-        return out;
+        out
     }
 
     fn causual_mask(&self, size: i64) -> Tensor {
         Tensor::ones(&[size, size], (Kind::Float, self.device)).tril(0)
     }
 
-    // TODO *** LEAK HERE!! maybe***
-    // TODO *** LEAK HERE!! maybe***
-    // TODO *** LEAK HERE!! maybe***
-    // TODO *** LEAK HERE!! maybe***
     fn attention(&self, query: &Tensor, key: &Tensor, value: &Tensor) -> Tensor {
-        //return Tensor::from_slice(&[1]);
         let (B, S, F) = query.size3().unwrap_or((1,1,1));
         let heads = i64::try_from(&self.heads).unwrap_or(1);
         let head_dims = F / heads;
@@ -260,6 +274,7 @@ impl TransformerBlock {
             .contiguous()
             .reshape(&[B, S, F]);
         let out = self.attention_projection.forward(&attn).dropout(self.dropout, self.training);
-        return out;
+
+        out
     }
 }
