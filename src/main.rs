@@ -11,8 +11,8 @@ use tch::{Device, Reduction, Tensor, nn::Module, nn::VarStore};
 
 /*
 TODO - ✅ pretty loss output
-TODO - save load
-TODO - pub fn chat()
+TODO - ✅ save load
+TODO - ✅ pub fn chat()
 TODO - ✅ All Stephen's voice transcripts- Train on this data
 TODO - ✅ Batching - Shuffle
 TODO - ✅ define optimizer AdamW
@@ -32,8 +32,8 @@ TODO - ✅ Model Network Projections
 TODO - ✅ Multi-headed reshape 2x
 TODO - ✅ FForward ( MLP )
 TODO - ✅ 3x LayerNorms
-TODO - Trianing
-TODO - Batch and Shuffle
+TODO - ✅ Trianing
+TODO - ✅ Batch and Shuffle
 TODO - Use Tiktokenizer with gpt encoding - @amzadhossain
 TODO -
 */
